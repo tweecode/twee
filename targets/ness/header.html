@@ -1,0 +1,1210 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+<head>
+<title>Ness</title>
+<style type="text/css">
+body{background-color:white; color:black; margin:0px}
+#storeArea{display:none}
+#top{width:100%; color:white; background:#04a2c5 url("topbar.png") repeat-x; height:75px; position:fixed; top:0px; line-height:75px}
+#top #title{font-weight:bold; padding:0px 10px; font-size:40px}
+#top #button{background:url("button.png") no-repeat; float:right; width:125px; height:75px; cursor:pointer}
+#top #button:hover{background-position:0px -75px}
+#body{margin-top:85px; padding:0px 30px; font-size:34px}
+#menu{position:absolute; top:50px; left:115px; width:580px; height:360px; display:none; z-index:2; background:url('menu.png') no-repeat top left; text-align:center; padding:10px 0px; font-size:38px}
+#menu button{margin-bottom:45px}
+#overlay{width:100%; height:100%; position:fixed; top:0px; left:0px; background-color:black; z-index:1; opacity:0.8; display:none}
+button{padding:10px 40px; height:65px; margin:15px; font-size:38px}
+.marked{background-color:#aafdff; padding:0px 6px}
+</style>
+<script type="text/javascript">
+//
+// Ness
+//
+// A superstripped down version of TiddlyWiki aimed at the Wii.
+// This code is a derivative of Jeremy Ruston's TiddlyWiki code,
+// which is licensed under the BSD license.
+
+//
+// main()
+// Changes the title of the page (set in SiteTitle) and loads the first
+// tiddler (set in FirstTiddler).
+//
+
+var version = {major: 1, minor: 0, revision: 0, extensions: {}};
+var config = { formatterHelpers: {}, textPrimitives: {}, macros: {}};
+var store = new TiddlyWiki();
+
+function main()
+{
+	// init
+	
+	store.loadFromDiv('storeArea',"store",true);
+	
+	// title
+	
+	var title = store.getTiddlerText('SiteTitle');
+	var titleDiv = document.getElementById('title');
+	removeChildren(titleDiv);
+	document.title = title;
+	wikify(title, titleDiv);
+	
+	// display first
+	
+	var first = store.getTiddlerText('FirstTiddler');
+	displayTiddler(first);
+};
+
+
+function displayTiddler (title)
+{
+	Position.currentTiddler = title;
+
+	var displayDiv = document.getElementById('body');
+
+	new FadeEffect('body', 1, 0, 0.2, switchContents);
+	
+	function switchContents()
+	{
+		removeChildren(displayDiv);
+		wikify(store.getTiddlerText(title), displayDiv);
+		new FadeEffect('body', 0, 1, 0.2);		
+	}
+};
+
+
+//
+// TiddlyWiki class
+// taken directly from TiddlyWiki 1.2 code
+//
+
+function TiddlyWiki()
+{
+	this.tiddlers = {}; // Hashmap by name of tiddlers
+	this.namedNotifications = []; // Array of {name:,notify:} of notification functions
+	this.dirty = false;
+}
+
+TiddlyWiki.prototype.tiddlerExists = function(title)
+{
+	var t = this.tiddlers[title];
+	return (t != undefined && t instanceof Tiddler);
+}
+
+TiddlyWiki.prototype.getTiddlerText = function(title,defaultText)
+{
+	if(!title)
+		return(defaultText);
+	var tiddler = this.tiddlers[title];
+	if(tiddler)
+		return tiddler.text;
+	else if(defaultText)
+		return defaultText;
+	else
+		return null;
+}
+
+TiddlyWiki.prototype.getRecursiveTiddlerText = function(title,defaultText,depth)
+{
+	var bracketRegExp = new RegExp("(?:\\[\\[([^\\]]+)\\]\\])","mg");
+	var text = this.getTiddlerText(title,defaultText);
+	if(text == null)
+		return "";
+	var textOut = [];
+	var lastPos = 0;
+	do {
+		var match = bracketRegExp.exec(text);
+		if(match)
+			{
+			textOut.push(text.substr(lastPos,match.index-lastPos));
+			if(match[1])
+				{
+				if(depth <= 0)
+					textOut.push(match[1]);
+				else
+					textOut.push(this.getRecursiveTiddlerText(match[1],match[1],depth-1));
+				}
+			lastPos = match.index + match[0].length;
+			}
+		else
+			textOut.push(text.substr(lastPos));
+	} while(match);
+	return(textOut.join(""));
+}
+
+
+// Load contents of a tiddlywiki from an HTML DIV
+TiddlyWiki.prototype.loadFromDiv = function(srcID,idPrefix)
+{
+	if(document.normalize)
+		document.normalize();
+	var lenPrefix = idPrefix.length;
+	var store = document.getElementById(srcID).childNodes;
+	for(var t = 0; t < store.length; t++)
+		{
+		var e = store[t];
+		var title = null;
+		if(e.getAttribute)
+			title = e.getAttribute("tiddler");
+		if(!title && e.id && e.id.substr(0,lenPrefix) == idPrefix)
+			title = e.id.substr(lenPrefix);
+		if(title && title != "")
+			{
+			var tiddler = this.createTiddler(title);
+			tiddler.loadFromDiv(e,title);
+			}
+		}
+}
+
+TiddlyWiki.prototype.createTiddler = function(title)
+{
+	tiddler = this.tiddlers[title];
+	if(!tiddler)
+		{
+		tiddler = new Tiddler();
+		this.tiddlers[title] = tiddler;
+		this.dirty = true;
+		}
+	return tiddler;
+}
+
+//
+// Tiddler class
+//
+
+function Tiddler()
+{
+	this.title = null;
+	this.text = null;
+	this.modifier = null;
+	this.modified = new Date();
+	this.links = [];
+	this.tags = [];
+	return this;
+}
+
+// Load a tiddler from an HTML DIV
+Tiddler.prototype.loadFromDiv = function(divRef,title)
+{
+	var text = Tiddler.unescapeLineBreaks(divRef.firstChild ? divRef.firstChild.nodeValue : "");
+	var modifier = divRef.getAttribute("modifier");
+	var modified = Date.convertFromYYYYMMDDHHMM(divRef.getAttribute("modified"));
+	var tags = divRef.getAttribute("tags");
+	this.set(title,text,modifier,modified,tags);
+	return this;
+}
+
+// Change the text and other attributes of a tiddler
+Tiddler.prototype.set = function(title,text,modifier,modified,tags)
+{
+	if(title != undefined)
+		this.title = title;
+	if(text != undefined)
+		this.text = text;
+	if(modifier != undefined)
+		this.modifier = modifier;
+	if(modified != undefined)
+		this.modified = modified;
+	if(tags != undefined)
+		this.tags = (typeof tags == "string") ? tags.readBracketedList() : tags;
+	else
+		this.tags = [];
+	return this;
+}
+
+var regexpBackSlashEn = new RegExp("\\\\n","mg");
+var regexpBackSlash = new RegExp("\\\\","mg");
+var regexpBackSlashEss = new RegExp("\\\\s","mg");
+var regexpNewLine = new RegExp("\n","mg");
+var regexpCarriageReturn = new RegExp("\r","mg");
+
+// Static method to Convert "\n" to newlines, "\s" to "\"
+Tiddler.unescapeLineBreaks = function(text)
+{
+	if(text && text != "")
+		return text.replace(regexpBackSlashEn,"\n").replace(regexpBackSlashEss,"\\").replace(regexpCarriageReturn,"");
+	else
+		return "";
+}
+
+// Convert newlines to "\n", "\" to "\s"
+Tiddler.prototype.escapeLineBreaks = function()
+{
+	return this.text.replace(regexpBackSlash,"\\s").replace(regexpNewLine,"\\n").replace(regexpCarriageReturn,"");
+}
+
+//
+// Wikifier class
+//
+
+function Wikifier(source,output,formatters)
+{
+	this.source = source;
+	this.output = output;
+	this.nextMatch = 0;
+	this.assembleFormatterMatches(formatters);
+	if(source && source != "")
+		this.subWikify(output,null);
+	return this;
+}
+
+Wikifier.prototype.assembleFormatterMatches = function(formatters)
+{
+	this.formatters = [];
+	var pattern = [];
+	for(var n=0; n<formatters.length; n++)
+		{
+		pattern.push("(" + formatters[n].match + ")");
+		this.formatters.push(formatters[n]);
+		}
+	this.formatterRegExp = new RegExp(pattern.join("|"),"mg");
+}
+
+Wikifier.prototype.subWikify = function(output,terminator)
+{
+	// Temporarily replace the output pointer
+	var oldOutput = this.output;
+	this.output = output;
+	// Prepare the terminator RegExp
+	var terminatorRegExp = terminator ? new RegExp("(" + terminator + ")","mg") : null;
+	do {
+		// Prepare the RegExp match positions
+		this.formatterRegExp.lastIndex = this.nextMatch;
+		if(terminatorRegExp)
+			terminatorRegExp.lastIndex = this.nextMatch;
+		// Get the first matches
+		var formatterMatch = this.formatterRegExp.exec(this.source);
+		var terminatorMatch = terminatorRegExp ? terminatorRegExp.exec(this.source) : null;
+		// Check for a terminator match
+		if(terminatorMatch && (!formatterMatch || terminatorMatch.index <= formatterMatch.index))
+			{
+			// Output any text before the match
+			if(terminatorMatch.index > this.nextMatch)
+				this.outputText(this.output,this.nextMatch,terminatorMatch.index);
+			// Set the match parameters
+			this.matchStart = terminatorMatch.index;
+			this.matchLength = terminatorMatch[1].length;
+			this.matchText = terminatorMatch[1];
+			this.nextMatch = terminatorMatch.index + terminatorMatch[1].length;
+			// Restore the output pointer and exit
+			this.output = oldOutput;
+			return;		
+			}
+		// Check for a formatter match
+		else if(formatterMatch)
+			{
+			// Output any text before the match
+			if(formatterMatch.index > this.nextMatch)
+				this.outputText(this.output,this.nextMatch,formatterMatch.index);
+			// Set the match parameters
+			this.matchStart = formatterMatch.index;
+			this.matchLength = formatterMatch[0].length;
+			this.matchText = formatterMatch[0];
+			this.nextMatch = this.formatterRegExp.lastIndex;
+			// Figure out which formatter matched
+			var matchingformatter = -1;
+			for(var t=1; t<formatterMatch.length; t++)
+				if(formatterMatch[t])
+					matchingFormatter = t-1;
+			// Call the formatter
+			if(matchingFormatter != -1)
+				this.formatters[matchingFormatter].handler(this);
+			}
+	} while(terminatorMatch || formatterMatch);
+	// Output any text after the last match
+	if(this.nextMatch < this.source.length)
+		{
+		this.outputText(this.output,this.nextMatch,this.source.length);
+		this.nextMatch = this.source.length;
+		}
+	// Restore the output pointer
+	this.output = oldOutput;
+}
+
+Wikifier.prototype.outputText = function(place,startPos,endPos)
+{
+	if(startPos < endPos)
+		{
+		createTiddlyText(place,this.source.substring(startPos,endPos));
+		}
+}
+
+config.formatterHelpers = {
+
+	charFormatHelper: function(w)
+	{
+		var e = createTiddlyElement(w.output,this.element);
+		w.subWikify(e,this.terminator);
+	},
+	
+	inlineCssHelper:  function(w)
+	{
+		var styles = [];
+		var lookahead = "(?:(" + config.textPrimitives.anyLetter + "+)\\(([^\\)\\|\\n]+)(?:\\):))|(?:(" + config.textPrimitives.anyLetter + "+):([^;\\|\\n]+);)";
+		var lookaheadRegExp = new RegExp(lookahead,"mg");
+		var hadStyle = false;
+		do {
+			lookaheadRegExp.lastIndex = w.nextMatch;
+			var lookaheadMatch = lookaheadRegExp.exec(w.source);
+			var gotMatch = lookaheadMatch && lookaheadMatch.index == w.nextMatch;
+			if(gotMatch)
+				{
+				var s,v;
+				hadStyle = true;
+				if(lookaheadMatch[1])
+					{
+					s = lookaheadMatch[1].unDash();
+					v = lookaheadMatch[2];
+					}
+				else
+					{
+					s = lookaheadMatch[3].unDash();
+					v = lookaheadMatch[4];
+					}
+				switch(s)
+					{
+					case "bgcolor": s = "backgroundColor"; break;
+					}
+				styles.push({style: s, value: v});
+				w.nextMatch = lookaheadMatch.index + lookaheadMatch[0].length;
+				}
+		} while(gotMatch);
+		return styles;
+	},
+
+	monospacedByLineHelper: function(w)
+	{
+		var lookaheadRegExp = new RegExp(this.lookahead,"mg");
+		lookaheadRegExp.lastIndex = w.matchStart;
+		var lookaheadMatch = lookaheadRegExp.exec(w.source);
+		if(lookaheadMatch && lookaheadMatch.index == w.matchStart)
+			{
+			var text = lookaheadMatch[1];
+			if(config.browser.isIE)
+				text = text.replace(/\n/g,"\r");
+			var e = createTiddlyElement(w.output,"pre",null,null,text);
+			w.nextMatch = lookaheadMatch.index + lookaheadMatch[0].length;
+			}
+	}
+
+};
+
+
+function wikify (source, output)
+{
+	new Wikifier(source,output,config.formatters);
+}
+
+config.formatters = [
+{
+	name: "table",
+	match: "^\\|(?:[^\\n]*)\\|(?:[fhc]?)$",
+	lookahead: "^\\|([^\\n]*)\\|([fhc]?)$",
+	rowTerminator: "\\|(?:[fhc]?)$\\n?",
+	cellPattern: "(?:\\|([^\\n\\|]*)\\|)|(\\|[fhc]?$\\n?)",
+	cellTerminator: "(?:\\x20*)\\|",
+	rowTypes: {"c": "caption", "h": "thead", "": "tbody", "f": "tfoot"},
+	handler: function(w)
+	{
+		var table = createTiddlyElement(w.output,"table");
+		w.nextMatch = w.matchStart;
+		var lookaheadRegExp = new RegExp(this.lookahead,"mg");
+		var currRowType = null, nextRowType;
+		var rowContainer, rowElement;
+		var prevColumns = [];
+		var rowCount = 0;
+		do {
+			lookaheadRegExp.lastIndex = w.nextMatch;
+			var lookaheadMatch = lookaheadRegExp.exec(w.source);
+			var matched = lookaheadMatch && lookaheadMatch.index == w.nextMatch;
+			if(matched)
+				{
+				nextRowType = lookaheadMatch[2];
+				if(nextRowType != currRowType)
+					rowContainer = createTiddlyElement(table,this.rowTypes[nextRowType]);
+				currRowType = nextRowType;
+				if(currRowType == "c")
+					{
+					if(rowCount == 0)
+						rowContainer.setAttribute("align","top");
+					else
+						rowContainer.setAttribute("align","bottom");
+					w.nextMatch = w.nextMatch + 1;
+					w.subWikify(rowContainer,this.rowTerminator);
+					}
+				else
+					{
+					rowElement = createTiddlyElement(rowContainer,"tr");
+					this.rowHandler(w,rowElement,prevColumns);
+					}
+				rowCount++;
+				}
+		} while(matched);
+	},
+	rowHandler: function(w,e,prevColumns)
+	{
+		var col = 0;
+		var currColCount = 1;
+		var cellRegExp = new RegExp(this.cellPattern,"mg");
+		do {
+			cellRegExp.lastIndex = w.nextMatch;
+			var cellMatch = cellRegExp.exec(w.source);
+			matched = cellMatch && cellMatch.index == w.nextMatch;
+			if(matched)
+				{
+				if(cellMatch[1] == "~")
+					{
+					var last = prevColumns[col];
+					if(last)
+						{
+						last.rowCount++;
+						last.element.setAttribute("rowSpan",last.rowCount);
+						last.element.setAttribute("rowspan",last.rowCount);
+						last.element.valign = "center";
+						}
+					w.nextMatch = cellMatch.index + cellMatch[0].length-1;
+					}
+				else if(cellMatch[1] == ">")
+					{
+					currColCount++;
+					w.nextMatch = cellMatch.index + cellMatch[0].length-1;
+					}
+				else if(cellMatch[2])
+					{
+					w.nextMatch = cellMatch.index + cellMatch[0].length;;
+					break;
+					}
+				else
+					{
+					var spaceLeft = false, spaceRight = false;
+					w.nextMatch++;
+					var styles = config.formatterHelpers.inlineCssHelper(w);
+					while(w.source.substr(w.nextMatch,1) == " ")
+						{
+						spaceLeft = true;
+						w.nextMatch++;
+						}
+					var cell;
+					if(w.source.substr(w.nextMatch,1) == "!")
+						{
+						cell = createTiddlyElement(e,"th");
+						w.nextMatch++;
+						}
+					else
+						cell = createTiddlyElement(e,"td");
+					prevColumns[col] = {rowCount: 1, element: cell};
+					lastColCount = 1;
+					lastColElement = cell;
+					if(currColCount > 1)
+						{
+						cell.setAttribute("colSpan",currColCount);
+						cell.setAttribute("colspan",currColCount);
+						currColCount = 1;
+						}
+					for(var t=0; t<styles.length; t++)
+						cell.style[styles[t].style] = styles[t].value;
+					w.subWikify(cell,this.cellTerminator);
+					if(w.matchText.substr(w.matchText.length-2,1) == " ")
+						spaceRight = true;
+					if(spaceLeft && spaceRight)
+						cell.align = "center";
+					else if (spaceLeft)
+						cell.align = "right";
+					else if (spaceRight)
+						cell.align = "left";
+					w.nextMatch = w.nextMatch-1;
+					}
+				col++;
+				}
+		} while(matched);		
+	}
+},
+
+{
+	name: "rule",
+	match: "^----$\\n?",
+	handler: function(w)
+	{
+		createTiddlyElement(w.output,"hr");
+	}
+},
+
+{
+	name: "heading",
+	match: "^!{1,5}",
+	terminator: "\\n",
+	handler: function(w)
+	{
+		var e = createTiddlyElement(w.output,"h" + w.matchLength);
+		w.subWikify(e,this.terminator);
+	}
+},
+
+{
+	name: "monospacedByLine",
+	match: "^\\{\\{\\{\\n",
+	lookahead: "^\\{\\{\\{\\n((?:^[^\\n]*\\n)+?)(^\\}\\}\\}$\\n?)",
+	handler: config.formatterHelpers.monospacedByLineHelper
+},
+
+{
+	name: "monospacedByLineForPlugin",
+	match: "^//\\{\\{\\{\\n",
+	lookahead: "^//\\{\\{\\{\\n\\n*((?:^[^\\n]*\\n)+?)(\\n*^//\\}\\}\\}$\\n?)",
+	handler: config.formatterHelpers.monospacedByLineHelper
+},
+
+{
+	name: "wikifyCommentForPlugin", 
+	match: "^/\\*\\*\\*\\n",
+	terminator: "^\\*\\*\\*/\\n",
+	handler: function(w)
+	{
+		w.subWikify(w.output,this.terminator);
+	}
+},
+
+{
+	name: "quoteByBlock",
+	match: "^<<<\\n",
+	terminator: "^<<<\\n",
+	handler: function(w)
+	{
+		var e = createTiddlyElement(w.output,"blockquote");
+		w.subWikify(e,this.terminator);
+	}
+},
+
+{
+	name: "quoteByLine",
+	match: "^>+",
+	terminator: "\\n",
+	element: "blockquote",
+	handler: function(w)
+	{
+		var lookaheadRegExp = new RegExp(this.match,"mg");
+		var placeStack = [w.output];
+		var currLevel = 0;
+		var newLevel = w.matchLength;
+		var t;
+		do {
+			if(newLevel > currLevel)
+				{
+				for(t=currLevel; t<newLevel; t++)
+					placeStack.push(createTiddlyElement(placeStack[placeStack.length-1],this.element));
+				}
+			else if(newLevel < currLevel)
+				{
+				for(t=currLevel; t>newLevel; t--)
+					placeStack.pop();
+				}
+			currLevel = newLevel;
+			w.subWikify(placeStack[placeStack.length-1],this.terminator);
+			createTiddlyElement(placeStack[placeStack.length-1],"br");
+			lookaheadRegExp.lastIndex = w.nextMatch;
+			var lookaheadMatch = lookaheadRegExp.exec(w.source);
+			var matched = lookaheadMatch && lookaheadMatch.index == w.nextMatch;
+			if(matched)
+				{
+				newLevel = lookaheadMatch[0].length;
+				w.nextMatch += lookaheadMatch[0].length;
+				}
+		} while(matched);
+	}
+},
+
+{
+	name: "list",
+	match: "^(?:(?:\\*+)|(?:#+))",
+	lookahead: "^(?:(\\*+)|(#+))",
+	terminator: "\\n",
+	outerElement: "ul",
+	itemElement: "li",
+	handler: function(w)
+	{
+		var lookaheadRegExp = new RegExp(this.lookahead,"mg");
+		w.nextMatch = w.matchStart;
+		var placeStack = [w.output];
+		var currType = null, newType;
+		var currLevel = 0, newLevel;
+		var t;
+		do {
+			lookaheadRegExp.lastIndex = w.nextMatch;
+			var lookaheadMatch = lookaheadRegExp.exec(w.source);
+			var matched = lookaheadMatch && lookaheadMatch.index == w.nextMatch;
+			if(matched)
+				{
+				if(lookaheadMatch[1])
+					newType = "ul";
+				if(lookaheadMatch[2])
+					newType = "ol";
+				newLevel = lookaheadMatch[0].length;
+				w.nextMatch += lookaheadMatch[0].length;
+				if(newLevel > currLevel)
+					{
+					for(t=currLevel; t<newLevel; t++)
+						placeStack.push(createTiddlyElement(placeStack[placeStack.length-1],newType));
+					}
+				else if(newLevel < currLevel)
+					{
+					for(t=currLevel; t>newLevel; t--)
+						placeStack.pop();
+					}
+				else if(newLevel == currLevel && newType != currType)
+					{
+						placeStack.pop();
+						placeStack.push(createTiddlyElement(placeStack[placeStack.length-1],newType));
+					}
+				currLevel = newLevel;
+				currType = newType;
+				var e = createTiddlyElement(placeStack[placeStack.length-1],"li");
+				w.subWikify(e,this.terminator);
+				}
+		} while(matched);
+	}
+},
+
+{
+	name: "prettyLink",
+	match: "\\[\\[",
+	lookahead: "\\[\\[([^\\|\\]]*?)(?:(\\]\\])|(\\|(.*?)\\]\\]))",
+	terminator: "\\|",
+	handler: function(w)
+	{
+		var lookaheadRegExp = new RegExp(this.lookahead,"mg");
+		lookaheadRegExp.lastIndex = w.matchStart;
+		var lookaheadMatch = lookaheadRegExp.exec(w.source)
+		if(lookaheadMatch && lookaheadMatch.index == w.matchStart && lookaheadMatch[2]) // Simple bracketted link
+			{
+			var link = createTiddlyLink(w.output,lookaheadMatch[1],false);
+			w.outputText(link,w.nextMatch,w.nextMatch + lookaheadMatch[1].length);
+			w.nextMatch += lookaheadMatch[1].length + 2;
+			}
+		else if(lookaheadMatch && lookaheadMatch.index == w.matchStart && lookaheadMatch[3]) // Pretty bracketted link
+			{
+			var e;
+			if(store.tiddlerExists(lookaheadMatch[4]))
+				e = createTiddlyLink(w.output,lookaheadMatch[4],false);
+			else
+				e = createExternalLink(w.output,lookaheadMatch[4]);
+			w.outputText(e,w.nextMatch,w.nextMatch + lookaheadMatch[1].length);
+			w.nextMatch = lookaheadMatch.index + lookaheadMatch[0].length;
+			}
+	}
+},
+
+{
+	name: "urlLink",
+	match: "(?:http|https|mailto|ftp):[^\\s'\"]+(?:/|\\b)",
+	handler: function(w)
+	{
+		var e = createExternalLink(w.output,w.matchText);
+		w.outputText(e,w.matchStart,w.nextMatch);
+	}
+},
+
+{
+	name: "image",
+	match: "\\[(?:[<]{0,1})(?:[>]{0,1})[Ii][Mm][Gg]\\[",
+	lookahead: "\\[([<]{0,1})([>]{0,1})[Ii][Mm][Gg]\\[(?:([^\\|\\]]+)\\|)?([^\\[\\]\\|]+)\\](?:\\[([^\\]]*)\\]?)?(\\])",
+	handler: function(w)
+	{
+		var lookaheadRegExp = new RegExp(this.lookahead,"mg");
+		lookaheadRegExp.lastIndex = w.matchStart;
+		var lookaheadMatch = lookaheadRegExp.exec(w.source);
+		if(lookaheadMatch && lookaheadMatch.index == w.matchStart) // Simple bracketted link
+			{
+			var e = w.output;
+			if(lookaheadMatch[5])
+				{
+				if(store.tiddlerExists(lookaheadMatch[5]))
+					e = createTiddlyLink(w.output,lookaheadMatch[5],false);
+				else
+					e = createExternalLink(w.output,lookaheadMatch[5]);
+				}
+			var img = createTiddlyElement(e,"img");
+			if(lookaheadMatch[1])
+				img.align = "left";
+			else if(lookaheadMatch[2])
+				img.align = "right";
+			if(lookaheadMatch[3])
+				img.title = lookaheadMatch[3];
+			img.src = lookaheadMatch[4];
+			w.nextMatch = lookaheadMatch.index + lookaheadMatch[0].length;
+			}
+	}
+},
+
+{
+	name: "macro",
+	match: "<<",
+	lookahead: "<<([^>\\s]+)(?:\\s*)([^>]*)>>",
+	handler: function(w)
+	{
+		var lookaheadRegExp = new RegExp(this.lookahead,"mg");
+		lookaheadRegExp.lastIndex = w.matchStart;
+		var lookaheadMatch = lookaheadRegExp.exec(w.source)
+		if(lookaheadMatch && lookaheadMatch.index == w.matchStart && lookaheadMatch[1])
+			{
+			var params = lookaheadMatch[2].readMacroParams();			
+			w.nextMatch = lookaheadMatch.index + lookaheadMatch[0].length;
+			try
+				{
+				var macro = config.macros[lookaheadMatch[1]];
+				if(macro && macro.handler)
+					macro.handler(w.output,lookaheadMatch[1],params,w);
+				else
+					createTiddlyElement(w.output,"span",null,"errorNoSuchMacro","<<" + lookaheadMatch[1] + ">>");
+				}
+			catch(e)
+				{
+				displayMessage(config.messages.macroError.format([lookaheadMatch[1]]));
+				displayMessage(e.toString());
+				}
+			}
+	}
+},
+
+{
+	name: "html",
+	match: "<[Hh][Tt][Mm][Ll]>",
+	lookahead: "<[Hh][Tt][Mm][Ll]>((?:.|\\n)*?)</[Hh][Tt][Mm][Ll]>",
+	handler: function(w)
+	{
+		var lookaheadRegExp = new RegExp(this.lookahead,"mg");
+		lookaheadRegExp.lastIndex = w.matchStart;
+		var lookaheadMatch = lookaheadRegExp.exec(w.source)
+		if(lookaheadMatch && lookaheadMatch.index == w.matchStart)
+			{
+			var e = createTiddlyElement(w.output,"span");
+			e.innerHTML = lookaheadMatch[1];
+			w.nextMatch = lookaheadMatch.index + lookaheadMatch[0].length;
+			}
+	}
+},
+
+{
+	name: "commentByBlock",
+	match: "/%",
+	lookahead: "/%((?:.|\\n)*?)%/",
+	handler: function(w)
+	{
+		var lookaheadRegExp = new RegExp(this.lookahead,"mg");
+		lookaheadRegExp.lastIndex = w.matchStart;
+		var lookaheadMatch = lookaheadRegExp.exec(w.source)
+		if(lookaheadMatch && lookaheadMatch.index == w.matchStart)
+			w.nextMatch = lookaheadMatch.index + lookaheadMatch[0].length;
+	}
+},
+
+{
+	name: "boldByChar",
+	match: "''",
+	terminator: "''",
+	element: "strong",
+	handler: config.formatterHelpers.charFormatHelper
+},
+
+{
+	name: "strikeByChar",
+	match: "==",
+	terminator: "==",
+	element: "strike",
+	handler: config.formatterHelpers.charFormatHelper
+},
+
+{
+	name: "underlineByChar",
+	match: "__",
+	terminator: "__",
+	element: "u",
+	handler: config.formatterHelpers.charFormatHelper
+},
+
+{
+	name: "italicByChar",
+	match: "//",
+	terminator: "//",
+	element: "em",
+	handler: config.formatterHelpers.charFormatHelper
+},
+
+{
+	name: "subscriptByChar",
+	match: "~~",
+	terminator: "~~",
+	element: "sub",
+	handler: config.formatterHelpers.charFormatHelper
+},
+
+{
+	name: "superscriptByChar",
+	match: "\\^\\^",
+	terminator: "\\^\\^",
+	element: "sup",
+	handler: config.formatterHelpers.charFormatHelper
+},
+
+{
+	name: "monospacedByChar",
+	match: "\\{\\{\\{",
+	lookahead: "\\{\\{\\{((?:.|\\n)*?)\\}\\}\\}",
+	handler: function(w)
+	{
+		var lookaheadRegExp = new RegExp(this.lookahead,"mg");
+		lookaheadRegExp.lastIndex = w.matchStart;
+		var lookaheadMatch = lookaheadRegExp.exec(w.source)
+		if(lookaheadMatch && lookaheadMatch.index == w.matchStart)
+			{
+			var e = createTiddlyElement(w.output,"code",null,null,lookaheadMatch[1]);
+			w.nextMatch = lookaheadMatch.index + lookaheadMatch[0].length;
+			}
+	}
+},
+
+{
+	name: "styleByChar",
+	match: "@@",
+	terminator: "@@",
+	lookahead: "(?:([^\\(@]+)\\(([^\\)]+)(?:\\):))|(?:([^:@]+):([^;]+);)",
+	handler:  function(w)
+	{
+		var e = createTiddlyElement(w.output,"span",null,null,null);
+		var styles = config.formatterHelpers.inlineCssHelper(w);
+		if(styles.length == 0)
+			e.className = "marked";
+		else
+			for(var t=0; t<styles.length; t++)
+				e.style[styles[t].style] = styles[t].value;
+		w.subWikify(e,this.terminator);
+	}
+},
+
+{
+	name: "lineBreak",
+	match: "\\n",
+	handler: function(w)
+	{
+		createTiddlyElement(w.output,"br");
+	}
+}
+];
+
+//
+// Global functions
+//
+
+function createTiddlyText(theParent,theText)
+{
+	return theParent.appendChild(document.createTextNode(theText));
+}
+
+function createTiddlyElement(theParent,theElement,theID,theClass,theText)
+{
+	var e = document.createElement(theElement);
+	if(theClass != null)
+		e.className = theClass;
+	if(theID != null)
+		e.setAttribute("id",theID);
+	if(theText != null)
+		e.appendChild(document.createTextNode(theText));
+	if(theParent != null)
+		theParent.appendChild(e);
+	return(e);
+}
+
+function createTiddlyLink(place,title,includeText)
+{
+	var text = includeText ? title : null;
+	var theClass = "tiddlyLink";
+	if(store.tiddlerExists(title))
+		theClass += " tiddlyLinkExisting";
+	else
+		theClass += " tiddlyLinkNonExisting";
+	var btn = createTiddlyButton(place,text,null,function () { displayTiddler(title) },theClass);
+	btn.setAttribute("tiddlyLink",title);
+	return(btn);
+}
+
+function createExternalLink(place,url)
+{
+	var theLink = document.createElement("a");
+	theLink.className = "externalLink";
+	theLink.href = url;
+	place.appendChild(theLink);
+	return(theLink);
+}
+
+
+function createTiddlyButton(theParent,theText,theTooltip,theAction,theClass,theId,theAccessKey)
+{
+	var theButton = document.createElement("button");
+	theButton.className = "button";
+	if(theAction)
+		{
+		theButton.onclick = theAction;
+		theButton.setAttribute("href","#");
+		}
+	theButton.setAttribute("title",theTooltip);
+	if(theText)
+		theButton.appendChild(document.createTextNode(theText));
+	if(theClass)
+		theButton.className = theClass;
+	if(theId)
+		theButton.id = theId;
+	if(theParent)
+		theParent.appendChild(theButton);
+	if(theAccessKey)
+		theButton.setAttribute("accessKey",theAccessKey);
+	return(theButton);
+}
+
+// Remove all children of a node
+function removeChildren(e)
+{
+	while(e.hasChildNodes())
+		e.removeChild(e.firstChild);
+}
+
+// set opacity of a node
+
+function setOpacity(e, opacity)
+{
+	var percent = (opacity == 1) ? 99.999 : Math.floor(opacity * 100);
+
+	// IE/Win
+	e.style.zoom = '1';
+	e.style.filter = 'alpha(opacity=' + percent + ')';
+
+	// Safari<1.2, Konqueror
+	e.style.KHTMLOpacity = opacity;
+
+	// Older Mozilla and Firefox
+	e.style.MozOpacity = opacity;
+  
+	// Safari 1.2, newer Firefox and Mozilla, CSS3
+	e.style.opacity = opacity;
+};
+
+// Ness specific functions
+
+Menu =
+{
+	show: function()
+	{		
+		Menu.originalSrc = menu.innerHTML;
+
+		document.getElementById('overlay').style.display = 'block';
+		new FadeEffect('menu', 0, 1, 0.25);
+	},
+	
+	hide: function (onComplete)
+	{
+		var menu = document.getElementById('menu');
+		menu.style.display = 'none';
+		menu.innerHTML = Menu.originalSrc;
+		document.getElementById('overlay').style.display = 'none';
+		
+		if (onComplete)
+			onComplete();
+	},
+	
+	showMessage: function (text)
+	{
+		var menu = document.getElementById('menu');
+		Menu.originalSrc = menu.innerHTML;
+
+		var padding = '<br /><br />';
+		var button = '<br /><br /><button onclick="Menu.hide()">OK</button>';
+				
+		menu.innerHTML = padding + text + button;
+	},
+
+	
+	MENU_HEIGHT: 360,
+	TOP_HEIGHT: 75,
+	originalSrc: ''
+};
+
+Position = 
+{
+	currentTiddler: 'FirstTiddler',
+	
+	save: function()
+	{
+		var expire = new Date();
+		expire.setYear(expire.getFullYear() + 1);
+		
+		document.cookie = Position.getPrefix() + '=' + Position.currentTiddler +
+										  '; expires=' + expire.toGMTString();
+										  		
+		Menu.showMessage('Your progress has been saved.');
+	},
+	
+	restore: function()
+	{
+		var cookies = document.cookie.split(';');
+		
+		for (var i = 0; i < cookies.length; i++)
+		{
+			var bits = cookies[i].split('=');
+			
+			if (bits[0] == Position.getPrefix())
+			{
+				Menu.hide(function() { displayTiddler(bits[1]) });
+				return;
+			}
+		}
+		
+		// fall through
+		
+		Menu.showMessage('Sorry, no saved position was found for this story.');
+	},
+	
+	getPrefix: function()
+	{
+		var cookiePrefix = store.getTiddlerText('SiteTitle') || 'ness';
+		return cookiePrefix.replace(' ', '_');	
+	}
+};
+
+function FadeEffect (el, start, end, step, onComplete)
+{
+	if (! step)
+		step = 0.1;
+
+	if (typeof el == 'string')
+		el = document.getElementById(el);
+
+	var max = (start > end) ? start : end;
+	var opacity = start;		
+	
+	setOpacity(el, start);
+
+	// show the element if previously hidden
+	
+	if (start == 0)
+		el.style.display = 'block';
+
+	var interval = window.setInterval(tick, 20);
+	
+	function tick()
+	{
+		opacity += (start < end) ? step : 0 - step;
+		
+		if (opacity > max)
+			opacity = max;
+			
+		if (opacity < 0)
+			opacity = 0;
+			
+		setOpacity(el, opacity);
+				
+		if (opacity == end)
+		{
+			window.clearInterval(interval);
+			
+			// hide the element completely if it is completely invisible
+			
+			if (end == 0)
+				el.style.display = 'none';
+			
+			if (onComplete)
+				onComplete();
+		};
+	};
+};
+
+
+function handleKey(e)
+{
+	if (! e)
+		e = window.event;
+		
+	switch (e.which)
+	{
+		case 175:		// up arrow
+		window.scrollBy(0, -1);
+		break;
+		
+		case 176:		// down arrow
+		window.scrollBy(0, 1);
+		break;
+	}
+}
+
+
+//
+// Extensions to primitive classes
+//
+
+// Process a string list of tiddler names into an array. Tiddler names that have spaces in them must be [[bracketed]]
+String.prototype.readBracketedList = function(unique)
+{
+	var bracketedPattern = "\\[\\[([^\\]]+)\\]\\]";
+	var unbracketedPattern = "[^\\s$]+";
+	var pattern = "(?:" + bracketedPattern + ")|(" + unbracketedPattern + ")";
+	var re = new RegExp(pattern,"mg");
+	var tiddlerNames = [];
+	do {
+		var match = re.exec(this);
+		if(match)
+			{
+			if(match[1]) // Bracketed
+				tiddlerNames.pushUnique(match[1],unique);
+			else if(match[2]) // Unbracketed
+				tiddlerNames.pushUnique(match[2],unique);
+			}
+	} while(match);
+	return(tiddlerNames);
+}
+
+
+// Static method to create a date from a UTC YYYYMMDDHHMM format string
+Date.convertFromYYYYMMDDHHMM = function(d)
+{
+	var theDate = new Date(parseInt(d.substr(0,4),10),
+							parseInt(d.substr(4,2),10)-1,
+							parseInt(d.substr(6,2),10),
+							parseInt(d.substr(8,2),10),
+							parseInt(d.substr(10,2),10),0,0);
+	return(theDate);
+}
+
+// Push a new value into an array only if it is not already present in the array. If the optional unique parameter is false, it reverts to a normal push
+Array.prototype.pushUnique = function(item,unique)
+{
+	if(unique != undefined && unique == false)
+		this.push(item);
+	else
+		{
+		if(this.indexOf(item) == -1)
+			this.push(item);
+		}
+}
+
+</script>
+</head>
+<body onload="main()" onkeyup="handleKey()">
+
+<div id="top">
+<span id="button" onclick="Menu.show()">&nbsp;</span>
+
+<span id="title">Loading...</span>
+
+</div>
+
+<div id="body"></div>
+
+<div id="menu">
+<button onclick="Position.save()">&nbsp;&nbsp;Save&nbsp;&nbsp;</button>
+<button onclick="Position.restore()">Restore</button>
+<br />
+<button onclick="Menu.hide(main)">Start Over</button>
+<br />
+<button onclick="Menu.hide()">Close</button>
+</div>
+
+<div id="overlay">&nbsp;</div>
+
+<div id="storeArea">

@@ -1,0 +1,2 @@
+<div tiddler="__plugin__SocialBookmarks" tags="script" modified="200709202033" created="200709202033" modifier="twee">var title = tale.get('StoryTitle').text + '%3a%20' + tale.get('StorySubtitle').text;\n\nvar links = document.getElementsByTagName('a');\n\nfor (var i = 0; i &lt; links.length; i++)\n	if (links[i].href.indexOf('socialbookmark'))\n		links[i].href += '?title=' + title + '&url=' + location.href;</div>
+</div></html>

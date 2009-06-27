@@ -1,0 +1,9 @@
+:: __plugin__SocialBookmarks [script]
+
+var title = tale.get('StoryTitle').text + '%3a%20' + tale.get('StorySubtitle').text;
+
+var links = document.getElementsByTagName('a');
+
+for (var i = 0; i < links.length; i++)
+	if (links[i].href.indexOf('socialbookmark'))
+		links[i].href += '?title=' + title + '&url=' + location.href;

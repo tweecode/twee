@@ -1,0 +1,6 @@
+:: __plugin__Debug [script]
+
+document.onKeyUp = function()
+{
+	console.log('hi');
+};

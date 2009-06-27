@@ -1,0 +1,2 @@
+<div tiddler="__plugin__SingleView" tags="script" modified="200709202032" created="200709202032" modifier="twee">History.prototype.originalDisplay = History.prototype.display;\n\nHistory.prototype.display = function (title, link, render)\n{\n	if ((render != 'quietly') && (render != 'offscreen'))\n		removeChildren($('passages'));\n		\n	this.originalDisplay.apply(this, arguments);\n};</div>
+</div></html>

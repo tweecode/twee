@@ -1,0 +1,14 @@
+:: Multimedia [script]
+
+// Pop-Up Embedder Script by David Battino, www.batmosphere.com
+// Version 2006-05-31 
+// OK to use if this notice is included
+
+macros['song'] =
+{
+	handler: function (place, name, params)
+	{
+		var player = insertElement(place, 'div');
+		
+	};
+};

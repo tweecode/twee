@@ -1,0 +1,10 @@
+:: __plugin__SingleView [script]
+History.prototype.originalDisplay = History.prototype.display;
+
+History.prototype.display = function (title, link, render)
+{
+	if ((render != 'quietly') && (render != 'offscreen'))
+		removeChildren($('passages'));
+		
+	this.originalDisplay.apply(this, arguments);
+};

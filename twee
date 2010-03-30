@@ -47,7 +47,7 @@ def main (argv):
 	
 	if merge != '':
 		file = open(merge)
-		tw.add_html(file.read())
+		tw.addHtml(file.read())
 		file.close()
 	
 	# read source files		
@@ -64,14 +64,14 @@ def main (argv):
 	
 	for source in sources:
 		file = open(source)		
-		tw.add_twee(file.read())
+		tw.addTwee(file.read())
 		file.close()
 
 	# generate RSS if requested
 	
 	if rss_output != '':
 		rss_file = open(rss_output, 'w')
-		tw.to_rss().write_xml(rss_file)
+		tw.toRss().write_xml(rss_file)
 		rss_file.close()
 		
 	# output the target header
@@ -84,7 +84,7 @@ def main (argv):
 	
 	# the tiddlers
 	
-	print tw.to_html()
+	print tw.toHtml()
 	
 	# plugins
 	

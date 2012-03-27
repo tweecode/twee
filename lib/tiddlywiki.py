@@ -45,7 +45,7 @@ class TiddlyWiki:
 		
 		return output
 		
-	def toHtml (self, app, target = None, order = None):
+	def toHtml (self, app = None, target = None, order = None):
 		"""Returns HTML code for this TiddlyWiki. If target is passed, adds a header."""
 		if not order: order = self.tiddlers.keys()
 		output = ''

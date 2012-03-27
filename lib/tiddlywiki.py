@@ -94,9 +94,9 @@ class TiddlyWiki:
 		
 	def toRss (self, num_items = 5):
 		"""Returns an RSS2 object of recently changed tiddlers."""
-		url = self.try_getting(['StoryUrl', 'SiteUrl'])
-		title = self.try_getting(['StoryTitle', 'SiteTitle'], 'Untitled Story')
-		subtitle = self.try_getting(['StorySubtitle', 'SiteSubtitle'])
+		url = self.tryGetting(['StoryUrl', 'SiteUrl'])
+		title = self.tryGetting(['StoryTitle', 'SiteTitle'], 'Untitled Story')
+		subtitle = self.tryGetting(['StorySubtitle', 'SiteSubtitle'])
 		
 		# build a date-sorted list of tiddler titles
 		

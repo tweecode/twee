@@ -84,7 +84,7 @@ def main (argv):
 	
 	# the tiddlers
 	
-	print tw.toHtml()
+	print tw.toHtml(scriptPath)
 	
 	# plugins
 	

@@ -76,7 +76,7 @@ def main (argv):
 		
 	# output the target header
 	
-	if (target != 'none') and (target != 'plugin'):
+	if (target != 'none') and (target != 'plugin') and (target != 'json'):
 		file = open(scriptPath + os.sep + 'targets' + os.sep + target \
 								+ os.sep + 'header.html')
 		print(file.read())
@@ -84,19 +84,24 @@ def main (argv):
 	
 	# the tiddlers
 	
-	print tw.toHtml()
+	if (target == 'json'):
+		print tw.toJson()
+	else:
+		print tw.toHtml()
 	
 	# plugins
 	
 	for plugin in plugins:
-		file = open(scriptPath + os.sep + 'targets' + os.sep + target \
-								+ os.sep + 'plugins' + os.sep + plugin + os.sep + 'compiled.html')
-		print(file.read())
-		file.close()
+		if target != 'json':
+			file = open(scriptPath + os.sep + 'targets' + os.sep + target \
+									+ os.sep + 'plugins' + os.sep + plugin + os.sep + 'compiled.html')
+			print(file.read())
+			file.close()
 	
 	# and close it up
 	
-	print '</div></html>'
+	if target != 'json':
+		print '</div></html>'
 
 
 if __name__ == '__main__':

@@ -11,7 +11,14 @@ To compile to Sugarcane instead of Jonah, use the -t flag:
 
     ./twee -t sugarcane my-input-file.tw > my-other-output-file.html
 
-The other targets are not recommended.  
+Fork by @emmett9001
+-------------------
+
+This fork of twee adds the ability to export to the JSON interchange format. This feature is most useful when exporting twine story data for use in other media settings, such as embedding in another python program, or in an actionscript applet via [twine for actionscript](https://github.com/emmett9001/twine-as3) by Emmett Butler.
+
+To export with JSON, simply use
+
+    ./twee -t json my-input-file.tw > my-story-output.json
 
 ***
 

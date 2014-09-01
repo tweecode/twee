@@ -11,7 +11,7 @@ To compile to Sugarcane instead of Jonah, use the -t flag:
 
     ./twee -t sugarcane my-input-file.tw > my-other-output-file.html
 
-To export the story data to JSON (which could be used by third-party programs like [Twine for AS3](https://github.com/emmett9001/twine-as3), simply use
+To export the story data to JSON (which could be used by third-party programs like [Twine for AS3](https://github.com/emmett9001/twine-as3)), simply use
 
     ./twee -t json my-input-file.tw > my-story-output.json
 

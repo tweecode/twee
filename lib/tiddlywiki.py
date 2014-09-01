@@ -12,7 +12,7 @@
 # that translate between Twee and TiddlyWiki output seamlessly.
 #
 
-import re, datetime, time, os, sys
+import re, datetime, time, os, sys, json
 import PyRSS2Gen as rss
 
 #
@@ -62,6 +62,13 @@ class TiddlyWiki:
 			output += '</div></body></html>'
 		
 		return output
+
+	def toJson (self):
+		output = {"data": []}
+		order = self.tiddlers.keys()
+		for i in order:
+			output['data'].append(self.tiddlers[i].toJson(self.author))
+		return json.dumps(output)
 	
 	def toRtf (self, order = None):
 		"""Returns RTF source code for this TiddlyWiki."""
@@ -262,6 +269,22 @@ class Tiddler:
 		
 		return output
 		
+		
+	def toJson (self, author = 'twee'):
+		now = time.localtime()
+		ret = {}
+
+		ret['title'] = self.title
+		ret['tags'] = []
+		for tag in self.tags:
+			ret['tags'].append(tag)
+		ret['modified'] = encode_date(self.modified)
+		ret['created'] = encode_date(self.created)
+		ret['modifier'] = author
+		ret['text'] = self.text
+		
+		return ret
+
 		
 	def toTwee (self):
 		"""Returns a Twee representation of this tiddler."""

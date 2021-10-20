@@ -16,7 +16,10 @@ def main (argv):
 
 	file = open(argv[0])
 	tw = TiddlyWiki()
-	tw.addHtml(file.read())
+	data = file.read()
+	# print data
+	tw.addHtml(data)
+	# print tw
 	print tw.toTwee()
 	
 

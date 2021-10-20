@@ -135,10 +135,11 @@ class TiddlyWiki:
 			
 	def addHtml (self, source):
 		"""Adds HTML source code to this TiddlyWiki."""
-		divs_re = re.compile(r'<div id="storeArea">(.*)</div>\s*</html>',
-												 re.DOTALL)
+		divs_re = re.compile(
+			r'<div id="storeArea"(.*)</html>',
+			re.DOTALL
+		)
 		divs = divs_re.search(source)
-
 		if divs:
 			for div in divs.group(1).split('<div'):
 				self.addTiddler(Tiddler('<div' + div, 'html'))

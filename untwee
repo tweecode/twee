@@ -19,7 +19,6 @@ def main (argv):
 	data = file.read()
 	# print data
 	tw.addHtml(data)
-	# print tw
 	print tw.toTwee()
 	
 
